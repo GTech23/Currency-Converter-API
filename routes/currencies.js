@@ -1,6 +1,6 @@
 import express from "express";
 import { Router } from "express";
-import { body, validationResult, matchedData } from "express-validator";
+import { validationResult, matchedData, query } from "express-validator";
 import { configDotenv } from "dotenv";
 configDotenv("../.env");
 const currencyRoute = Router();
@@ -23,56 +23,46 @@ currencyRoute.get("/api/currency/latest", async (req, res) => {
   res.status(200).json({ success: true, latestRate });
 });
 
-currencyRoute.get(
-  "/api/currency/rate",
-  [
-    body("target")
-      .isString()
-      .notEmpty()
-      .withMessage("Target Currency is required"),
+currencyRoute.get("/api/currency/rate", async (req, res) => {
+  const { base, target } = req.query;
 
-    body("base").isString().notEmpty().withMessage("Base Currency is required"),
-  ],
-  async (req, res) => {
-    const validatedData = matchedData(req);
-    const base = validatedData.base;
-    const target = validatedData.target;
+  if (!base || !target) {
+    res.status(400).json({ error: "base and target are required" });
+  } else {
+    try {
+      const response = await getCurrencyRate("/latest");
+      const data = response.data;
+      const baseRate = data[base].value;
+      const targetRate = data[target].value;
 
-    const errors = validationResult(req);
-
-    if (!errors || !errors.length) {
-      try {
-        const response = await getCurrencyRate("/latest");
-        const data = response.data;
-        const baseRate = data[base].value;
-        const targetRate = data[target].value;
-
-        res.status(200).json({
-          success: true,
-          data: { base: baseRate, target: targetRate },
-        });
-      } catch (err) {
-        console.log(err);
-      }
-    } else {
-      res.status(400).json({ errors: errors.array() });
+      res.status(200).json({
+        success: true,
+        data: { base: baseRate, target: targetRate },
+      });
+    } catch (err) {
+      console.log(err);
     }
   }
-);
-currencyRoute.post("/api/currency/convert", async (req, res) => {
-  const { base, target, amount } = req.body;
+});
+currencyRoute.get("/api/currency/convert", async (req, res) => {
+  const { base, target, amount } = req.query;
 
-  try {
-    const response = await getCurrencyRate("/latest");
-    const data = response.data;
-    const baseRate = data[base].value;
-    const targetRate = data[target].value;
+  if (!base || !target || !amount) {
+    res.status(400).json({ error: "base, target, and amount are required" });
+    return;
+  } else {
+    try {
+      const response = await getCurrencyRate("/latest");
+      const data = response.data;
+      const baseRate = data[base].value;
+      const targetRate = data[target].value;
 
-    const RATE = (amount / baseRate) * targetRate;
+      const RATE = (amount / baseRate) * targetRate;
 
-    res.status(200).json({ success: true, data: { convertedValue: RATE } });
-  } catch (err) {
-    console.log(err);
+      res.status(200).json({ success: true, data: { convertedValue: RATE } });
+    } catch (err) {
+      console.log(err);
+    }
   }
 });
 
